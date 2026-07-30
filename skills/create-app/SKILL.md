@@ -64,7 +64,7 @@ publish_app({ appId })
 
 | 工具 | 用途 |
 |------|------|
-| `create_app({domain, requirement, title?})` | 创建应用（扣分） |
+| `create_app({domain, requirement, title?})` | 创建应用（扣分；异步，agent 多轮生成约 1-3 分钟，工具自动等结果） |
 | `list_my_apps({domain?})` | 看老师已有的应用 |
 | `get_app({appId})` | 查某个应用的状态/链接 |
 | `publish_app({appId})` | 草稿提交审核（不扣分） |

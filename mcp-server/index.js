@@ -120,33 +120,56 @@ async function createApp(args) {
     return { isError: true, text: '请提供应用需求描述（requirement）。' }
   }
 
-  const { status, data } = await apiCall(token, endpoint, 'POST', '/api/v1/integrations/workbuddy/apps', {
+  // 1. POST → 202 + jobId（agent 后台跑，HTTP 立即返回）
+  const { status, data } = await apiCall(token, endpoint, 'POST', '/api/v1/workbuddy/apps', {
     domain,
     requirement,
     title: args.title,
   })
-  if (status !== 201) return { isError: true, text: translateHttpError(status, data) }
+  if (status !== 202) return { isError: true, text: translateHttpError(status, data) }
+  const jobId = data?.data?.jobId
+  if (!jobId) return { isError: true, text: '创建失败：后端未返回 jobId。' }
 
-  const d = data?.data || {}
+  // 2. 轮询 job 到完成（app-builder agent 多轮生成，分钟级）
+  const job = await pollJob(token, endpoint, jobId)
+  if (job.status === 'failed') {
+    return { isError: true, text: `⚠️ ${job.error || '生成失败，可调整需求重试。'}` }
+  }
+
+  // 3. 完成 → 返回 appId + 链接
   const lines = [
     `✅ 已创建「${domain}」领域应用`,
-    `   appId：${d.appId}`,
-    d.links?.preview ? `   预览：${d.links.preview}` : '',
-    d.links?.play ? `   使用（发布后可用）：${d.links.play}` : '',
+    `   appId：${job.appId}`,
+    job.links?.preview ? `   预览：${job.links.preview}` : '',
+    job.links?.play ? `   使用（发布后可用）：${job.links.play}` : '',
+    '   可继续完善后调用 publish_app 提交审核。',
   ].filter(Boolean)
-  if (d.isFallback) {
-    lines.push(`   ⚠️ ${d.hint || '生成不理想，已用默认模板，可重试或调整需求。'}`)
-  } else {
-    lines.push('   可继续完善后调用 publish_app 提交审核。')
+  return { text: lines.join('\n'), appId: job.appId }
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+/** 轮询 GET /jobs/:jobId 到 completed/failed（或超时）。 */
+async function pollJob(token, endpoint, jobId) {
+  const MAX_MS = 6 * 60 * 1000 // 6 分钟（agent 多轮生成留足余量）
+  const INTERVAL_MS = 5000
+  const start = Date.now()
+  while (Date.now() - start < MAX_MS) {
+    await sleep(INTERVAL_MS)
+    const { status, data } = await apiCall(token, endpoint, 'GET', `/api/v1/workbuddy/jobs/${jobId}`)
+    const d = data?.data
+    if (d?.status === 'completed' || d?.status === 'failed') return d
+    if (status === 404) return { status: 'failed', error: '任务已失效（后端可能重启），请重试。' }
+    // pending → 继续轮询
   }
-  return { text: lines.join('\n'), appId: d.appId, isFallback: !!d.isFallback }
+  return { status: 'failed', error: '生成超时（超过 6 分钟，agent 可能卡住或被重启打断）。' }
 }
 
 async function listMyApps(args) {
   const { endpoint, token } = readConfig()
   if (!endpoint || !token) return { isError: true, text: missingConfig() }
   const qs = args?.domain ? `?domain=${encodeURIComponent(args.domain)}` : ''
-  const { status, data } = await apiCall(token, endpoint, 'GET', `/api/v1/integrations/workbuddy/apps${qs}`)
+  const { status, data } = await apiCall(token, endpoint, 'GET', `/api/v1/workbuddy/apps${qs}`)
   if (status !== 200) return { isError: true, text: translateHttpError(status, data) }
   const apps = data?.data?.apps || []
   if (apps.length === 0) return { text: '还没有应用。调用 create_app 开始创作。' }
@@ -161,7 +184,7 @@ async function getApp(args) {
   if (!endpoint || !token) return { isError: true, text: missingConfig() }
   const appId = typeof args?.appId === 'string' ? args.appId.trim() : ''
   if (!appId) return { isError: true, text: '请提供 appId。' }
-  const { status, data } = await apiCall(token, endpoint, 'GET', `/api/v1/integrations/workbuddy/apps/${encodeURIComponent(appId)}`)
+  const { status, data } = await apiCall(token, endpoint, 'GET', `/api/v1/workbuddy/apps/${encodeURIComponent(appId)}`)
   if (status !== 200) return { isError: true, text: translateHttpError(status, data) }
   const app = data?.data?.app
   if (!app) return { text: '应用详情为空。' }
@@ -182,7 +205,7 @@ async function publishApp(args) {
   if (!endpoint || !token) return { isError: true, text: missingConfig() }
   const appId = typeof args?.appId === 'string' ? args.appId.trim() : ''
   if (!appId) return { isError: true, text: '请提供 appId。' }
-  const { status, data } = await apiCall(token, endpoint, 'POST', `/api/v1/integrations/workbuddy/apps/${encodeURIComponent(appId)}/publish`)
+  const { status, data } = await apiCall(token, endpoint, 'POST', `/api/v1/workbuddy/apps/${encodeURIComponent(appId)}/publish`)
   if (status !== 200) return { isError: true, text: translateHttpError(status, data) }
   const msg = data?.data?.message
   return { text: msg ? `ℹ️ ${msg}` : '✅ 已提交审核，审核通过后学生即可使用。' }
@@ -194,7 +217,8 @@ const TOOLS = [
     name: 'create_app',
     description:
       '在 creator-master 创建一个教学应用（覆盖 image 绘画 / learn 课件 / music 音乐 / video 视频）。' +
-      '需要老师的自然语言需求；创建会按平台规则扣创作分。返回 appId、预览/使用链接；若 AI 生成不理想会标注并给提示。',
+      '需老师的自然语言需求。创建是异步的：后端 app-builder agent 多轮生成，通常需 1-3 分钟，本工具会自动轮询到完成。' +
+      '创建按平台规则扣创作分。成功返回 appId+预览/使用链接；失败（生成不理想/超时）返回提示，可调整需求重试。',
     inputSchema: {
       type: 'object',
       properties: {
