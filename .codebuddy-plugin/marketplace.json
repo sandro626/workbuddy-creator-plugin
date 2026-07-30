@@ -1,0 +1,19 @@
+{
+  "name": "creator-master-marketplace",
+  "description": "creator-master WorkBuddy 插件市场（去中心化：Git 仓 + 此清单，无需平台审核）",
+  "owner": {
+    "name": "creator-master",
+    "email": "noreply@creator-master.local"
+  },
+  "plugins": [
+    {
+      "name": "creator-master",
+      "description": "在 WorkBuddy 里用 creator-master 创作教学应用（绘画/课件/音乐/视频），创作扣分、密钥绑个人账号。",
+      "description_en": "Create teaching apps on creator-master from inside WorkBuddy.",
+      "version": "1.0.0",
+      "source": ".",
+      "category": "education",
+      "license": "MIT"
+    }
+  ]
+}

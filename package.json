@@ -1,0 +1,9 @@
+{
+  "name": "workbuddy-creator-plugin",
+  "version": "1.0.0",
+  "description": "WorkBuddy 插件：在 WorkBuddy 里用 creator-master 引擎创作教学应用（绘画/课件/音乐/视频）。",
+  "private": true,
+  "license": "MIT",
+  "type": "commonjs",
+  "engines": { "node": ">=18" }
+}
