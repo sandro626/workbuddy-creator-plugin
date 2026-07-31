@@ -82,6 +82,22 @@ async function apiCall(token, endpoint, method, urlPath, body) {
   return { status: res.status, data }
 }
 
+// 把图片 URL 抓成 MCP image 内容块（{type:'image', data:base64, mimeType}），失败返回 null。
+// 用于 get_app 把应用封面（cover_image）作为预览图直接嵌进 WorkBuddy（方案 B）。
+async function fetchImageContent(url) {
+  if (!url || typeof url !== 'string') return null
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return null
+    const ct = (res.headers.get('content-type') || 'image/png').split(';')[0].trim()
+    if (!ct.startsWith('image/')) return null
+    const buf = Buffer.from(await res.arrayBuffer())
+    return { type: 'image', data: buf.toString('base64'), mimeType: ct }
+  } catch {
+    return null
+  }
+}
+
 // 把后端 HTTP 错误翻成给老师/agent 的中文指引（不把原始报文直接抛给老师）
 function translateHttpError(status, data) {
   const code = data?.error?.code || data?.code
@@ -140,9 +156,9 @@ async function createApp(args) {
   const lines = [
     `✅ 已创建「${domain}」领域应用`,
     `   appId：${job.appId}`,
-    job.links?.preview ? `   预览：${job.links.preview}` : '',
+    (job.links?.create || job.links?.preview) ? `   创作页：${job.links?.create || job.links?.preview}` : '',
     job.links?.play ? `   使用（发布后可用）：${job.links.play}` : '',
-    '   可继续完善后调用 publish_app 提交审核。',
+    '   可到创作页继续完善，或调用 publish_app 提交审核。',
   ].filter(Boolean)
   return { text: lines.join('\n'), appId: job.appId }
 }
@@ -174,7 +190,7 @@ async function listMyApps(args) {
   const apps = data?.data?.apps || []
   if (apps.length === 0) return { text: '还没有应用。调用 create_app 开始创作。' }
   const rows = apps.map(
-    (a) => `- [${a.status}] ${a.name}（${a.domain}）appId=${a.id}`,
+    (a) => `- [${a.status}] ${a.name}（${a.domain}）appId=${a.id}` + (a.links?.create ? `\n    创作页：${a.links.create}` : ''),
   )
   return { text: `你的应用（共 ${data.data.total} 个）：\n${rows.join('\n')}` }
 }
@@ -188,15 +204,23 @@ async function getApp(args) {
   if (status !== 200) return { isError: true, text: translateHttpError(status, data) }
   const app = data?.data?.app
   if (!app) return { text: '应用详情为空。' }
+  const links = data?.data?.links || {}
+  const text = [
+    `应用：${app.name}（${app.domain}）`,
+    `状态：${app.status}`,
+    app.description ? `描述：${app.description}` : '',
+    links.create ? `创作页：${links.create}` : '',
+    links.play ? `使用页（发布后）：${links.play}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n')
+  // 封面图作为预览直接嵌进 WorkBuddy（方案 B）；无封面则提示去创作页生成
+  const images = []
+  const img = await fetchImageContent(app.cover_image)
+  if (img) images.push(img)
   return {
-    text: [
-      `应用：${app.name}（${app.domain}）`,
-      `状态：${app.status}`,
-      app.description ? `描述：${app.description}` : '',
-      data.data.links?.play ? `使用链接（发布后）：${data.data.links.play}` : '',
-    ]
-      .filter(Boolean)
-      .join('\n'),
+    text: images.length ? `${text}\n（封面预览见下图）` : `${text}\n（暂无封面，到创作页运行生成后才有预览图）`,
+    images,
   }
 }
 
@@ -293,11 +317,13 @@ async function handle(msg) {
         return { jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: `未知工具：${name}` }], isError: true } }
       }
       const out = await handler(params?.arguments || {})
+      const content = [{ type: 'text', text: out.text }]
+      if (Array.isArray(out.images) && out.images.length) content.push(...out.images)
       return {
         jsonrpc: '2.0',
         id,
         result: {
-          content: [{ type: 'text', text: out.text }],
+          content,
           isError: out.isError === true,
         },
       }
