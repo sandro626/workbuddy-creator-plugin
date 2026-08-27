@@ -123,7 +123,7 @@ function translateHttpError(status, data) {
 }
 
 // ── 工具实现 ──────────────────────────────────────────────────────────────
-async function createApp(args) {
+async function createApp(args, ctx) {
   const { endpoint, token } = readConfig()
   if (!endpoint || !token) return { isError: true, text: missingConfig() }
   const domain = args?.domain
@@ -148,8 +148,8 @@ async function createApp(args) {
   const jobId = data?.data?.jobId
   if (!jobId) return { isError: true, text: '创建失败：后端未返回 jobId。' }
 
-  // 2. 轮询 job 到完成（app-builder agent 多轮生成，分钟级）
-  const job = await pollJob(token, endpoint, jobId)
+  // 2. 轮询 job 到完成（app-builder agent 多轮生成，分钟级）；带 progressToken 时推进度通知
+  const job = await pollJob(token, endpoint, jobId, { onProgress: makeProgressNotifier(ctx?.progressToken) })
   if (job.status === 'failed') {
     return { isError: true, text: `⚠️ ${job.error || '生成失败，可调整需求重试。'}` }
   }
@@ -167,7 +167,7 @@ async function createApp(args) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
-/** 轮询 GET /jobs/:jobId 到 completed/failed（或超时）。opts 参数化：run 类传更长的 maxMs。 */
+/** 轮询 GET /jobs/:jobId 到 completed/failed（或超时）。opts：maxMs/intervalMs 参数化；onProgress(d) 每轮 pending 回调（MCP progress notification 用）。 */
 async function pollJob(token, endpoint, jobId, opts = {}) {
   const MAX_MS = opts.maxMs || 6 * 60 * 1000 // 默认 6 分钟（agent 多轮生成留足余量）
   const INTERVAL_MS = opts.intervalMs || 5000
@@ -178,7 +178,8 @@ async function pollJob(token, endpoint, jobId, opts = {}) {
     const d = data?.data
     if (d?.status === 'completed' || d?.status === 'failed') return d
     if (status === 404) return { status: 'failed', error: '任务已失效（后端可能重启），请重试。' }
-    // pending → 继续轮询
+    // pending → 回调进度（客户端带 progressToken 时发 notifications/progress）→ 继续轮询
+    if (typeof opts.onProgress === 'function') opts.onProgress(d, MAX_MS, start)
   }
   return { status: 'failed', error: `生成超时（超过 ${Math.round(MAX_MS / 60000)} 分钟，agent 可能卡住或被重启打断）。` }
 }
@@ -238,7 +239,7 @@ async function publishApp(args) {
 }
 
 // ── run_app（openspec workbuddy-run-app）：调用指定应用 → 返回产物 ────────────
-async function runApp(args) {
+async function runApp(args, ctx) {
   const { endpoint, token } = readConfig()
   if (!endpoint || !token) return { isError: true, text: missingConfig() }
   const appId = typeof args?.appId === 'string' ? args.appId.trim() : ''
@@ -260,8 +261,8 @@ async function runApp(args) {
   const jobId = data?.data?.jobId
   if (!jobId) return { isError: true, text: '运行失败：后端未返回 jobId。' }
 
-  // 2. 轮询（run 类：8min 上限 / 10s 间隔）
-  const job = await pollJob(token, endpoint, jobId, { maxMs: 8 * 60 * 1000, intervalMs: 10000 })
+  // 2. 轮询（run 类：8min 上限 / 10s 间隔）；带 progressToken 时推进度通知
+  const job = await pollJob(token, endpoint, jobId, { maxMs: 8 * 60 * 1000, intervalMs: 10000, onProgress: makeProgressNotifier(ctx?.progressToken) })
   if (job.status === 'failed') {
     return { isError: true, text: `⚠️ ${job.error || '运行失败，可调整输入重试。'}` }
   }
@@ -365,6 +366,25 @@ const TOOLS = [
   },
 ]
 
+// ── MCP progress notification（MCP 规范 notifications/progress）──────────────
+// 客户端 tools/call 带 _meta.progressToken 时，轮询期间主动推进度（progress=已耗时百分比，
+// message=后端 job.progress 中文文案）；客户端不带 token 则零调用零影响。
+function makeProgressNotifier(progressToken) {
+  if (progressToken === undefined || progressToken === null) return undefined
+  return (jobData, maxMs, startMs) => {
+    send({
+      jsonrpc: '2.0',
+      method: 'notifications/progress',
+      params: {
+        progressToken,
+        progress: Math.min(100, Math.round(((Date.now() - startMs) / maxMs) * 100)),
+        total: 100,
+        message: (jobData && jobData.progress) || '处理中…',
+      },
+    })
+  }
+}
+
 const TOOL_HANDLERS = {
   create_app: createApp,
   run_app: runApp,
@@ -401,7 +421,7 @@ async function handle(msg) {
       if (!handler) {
         return { jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: `未知工具：${name}` }], isError: true } }
       }
-      const out = await handler(params?.arguments || {})
+      const out = await handler(params?.arguments || {}, { progressToken: params?._meta?.progressToken })
       const content = [{ type: 'text', text: out.text }]
       if (Array.isArray(out.images) && out.images.length) content.push(...out.images)
       if (Array.isArray(out.audios) && out.audios.length) content.push(...out.audios)
