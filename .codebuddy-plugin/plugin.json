@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-plugin.json",
   "name": "creator-master",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "在 WorkBuddy 里用 creator-master 的引擎创作教学应用（绘画 / 课件 / 音乐 / 视频 / 游戏），创作走原平台扣分逻辑、密钥绑个人账号。",
   "description_en": "Create teaching apps (painting / courseware / music / video) on creator-master from inside WorkBuddy. Creation charges points via the platform; keys are user-bound.",
   "author": {

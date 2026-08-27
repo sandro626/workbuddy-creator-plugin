@@ -27,8 +27,10 @@ const os = require('node:os')
 const SERVER_NAME = 'creator-master'
 const SERVER_VERSION = '1.1.0'
 const SUPPORTED_DOMAINS = ['image', 'learn', 'music', 'video', 'game']
-// audio 块嵌入开关（裁定 4：以 WorkBuddy 实测为准——CodeBuddy 不渲染可置 false 回退 URL-only）
-const EMBED_AUDIO_BLOCKS = process.env.EMBED_AUDIO === '0' ? false : true
+// audio 块嵌入开关（2026-08-27 真机实测裁定：默认关闭——CodeBuddy/WorkBuddy 无原生音频渲染，
+// 3MB base64 被 Agent 当 300 万字文本处理（存盘+读取烧 token），弊大于利。URL 即够。
+// 显式设 EMBED_AUDIO=1 可重新开启）
+const EMBED_AUDIO_BLOCKS = process.env.EMBED_AUDIO === '1' ? true : false
 
 // ── 配置解析 ──────────────────────────────────────────────────────────────
 function readConfig() {
