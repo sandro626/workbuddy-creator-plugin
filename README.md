@@ -88,3 +88,10 @@ echo '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' | API_ENDPOINT
 - **领域**：image / learn / music / video。**game 暂未开放**（其创建入口是 agent game-gen，不共享 createDraftApp，Phase 1 再接）。
 - 创作**扣分**到密钥绑定账号；重试会再次扣分。
 - 密钥明文只在 creator-master 用户中心签发时显示一次；遗失请吊销重建。
+
+## macOS GUI 启动注意（2026-08-27 真机排障）
+
+`.mcp.json` 的 `command` 使用了绝对路径 `/opt/homebrew/bin/node`——WorkBuddy 作为 GUI
+应用默认 PATH 不含 Homebrew，相对命令 `node` 会 spawn 失败（连接器显示 disconnected）。
+其它机器（nvm/系统 node）请改回 `"command": "node"` 或本机 `which node` 的绝对路径。
+`API_ENDPOINT` 建议填 `http://127.0.0.1:3000`（避开 localhost 的 IPv6 解析问题）。

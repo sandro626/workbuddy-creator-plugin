@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "creator-master": {
-      "command": "node",
+      "command": "/opt/homebrew/bin/node",
       "args": ["${CODEBUDDY_PLUGIN_ROOT}/mcp-server/index.js"],
       "env": {
         "API_ENDPOINT": "${user_config.API_ENDPOINT}",
