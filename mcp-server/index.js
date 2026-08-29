@@ -278,7 +278,7 @@ async function runApp(args, ctx) {
   } else {
     lines.push('   产物：')
     for (const a of arts) {
-      const label = { image: '图片', svg: '信息图/矢量图', audio: '音频', video: '视频', outline: '大纲', game: '游戏' }[a.type] || a.type
+      const label = { image: '图片', svg: '信息图/矢量图', audio: '音频', video: '视频', outline: '大纲', game: '游戏', model: '3D 模型 (GLB)' }[a.type] || a.type
       if (a.url) lines.push(`   - [${label}] ${a.url}${a.note ? `（${a.note}）` : ''}`)
       else if (a.text) lines.push(`   - [${label}] ${String(a.text).slice(0, 800)}`)
     }
