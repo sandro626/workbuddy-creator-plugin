@@ -10,7 +10,7 @@
       "name": "creator-master",
       "description": "在 WorkBuddy 里用 creator-master 创作教学应用（绘画/课件/音乐/视频/游戏），创作扣分、密钥绑个人账号。",
       "description_en": "Create teaching apps on creator-master from inside WorkBuddy.",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "source": ".",
       "category": "education",
       "license": "MIT"
