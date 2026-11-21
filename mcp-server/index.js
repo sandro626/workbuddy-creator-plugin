@@ -25,8 +25,8 @@ const path = require('node:path')
 const os = require('node:os')
 
 const SERVER_NAME = 'creator-master'
-const SERVER_VERSION = '1.1.0'
-const SUPPORTED_DOMAINS = ['image', 'learn', 'music', 'video', 'game']
+const SERVER_VERSION = '1.4.0'
+const SUPPORTED_DOMAINS = ['image', 'learn', 'music', 'video', 'game', 'app']
 // audio 块嵌入开关（2026-08-27 真机实测裁定：默认关闭——CodeBuddy/WorkBuddy 无原生音频渲染，
 // 3MB base64 被 Agent 当 300 万字文本处理（存盘+读取烧 token），弊大于利。URL 即够。
 // 显式设 EMBED_AUDIO=1 可重新开启）
@@ -310,11 +310,12 @@ const TOOLS = [
     description:
       '在 creator-master 创建一个教学应用（覆盖 image 绘画 / learn 课件 / music 音乐 / video 视频 / game 游戏）。' +
       '需老师的自然语言需求。创建是异步的：通常需 1-3 分钟（game 单轮出完整可玩游戏包），本工具会自动轮询到完成。' +
-      '创建按平台规则扣创作分（game 预扣较多，失败自动退还）。成功返回 appId+预览/使用链接；失败返回提示，可调整需求重试。',
+      '创建按平台规则扣创作分（game 预扣较多，失败自动退还）。成功返回 appId+预览/使用链接；失败返回提示，可调整需求重试。' +
+      'app=智能微应用（对话式工作流应用，如识图认植物、飞花令小游戏；create 后用 run_app 与它对话）。',
     inputSchema: {
       type: 'object',
       properties: {
-        domain: { type: 'string', enum: SUPPORTED_DOMAINS, description: '应用领域：image/learn/music/video/game' },
+        domain: { type: 'string', enum: SUPPORTED_DOMAINS, description: '应用领域：image/learn/music/video/game/app' },
         requirement: { type: 'string', description: '应用需求的自然语言描述（老师想做什么应用）' },
         title: { type: 'string', description: '可选应用标题' },
       },
@@ -328,7 +329,8 @@ const TOOLS = [
       '各领域一轮语义【如实告知老师】：image=出成品图/信息图（可续聊改图）；music=出一首歌；learn=先出大纲，老师确认后（回复"确认"或传 confirm=true）逐场景生成配图配音（10-30 分钟，超 8 分钟工具会超时但生成仍在后台继续，可稍后到创作页查看）；' +
       'video=推进流水线阶段（分镜/角色/场景图，一轮不出成片）；game=迭代老师自己的已有游戏（加关卡/改玩法，返回可玩链接）。' +
       '权限：image/learn/video 可运行自己的或已发布应用；music/game 仅限应用作者本人（运行会修改应用的作品内容）。' +
-      '运行按平台规则扣创作分。产物链接 7 天内有效、可直接打开无需登录；创作页链接需登录平台。',
+      '运行按平台规则扣创作分。产物链接 7 天内有效、可直接打开无需登录；创作页链接需登录平台。' +
+      'app=与已完成的智能微应用对话一轮（返回微应用回复）。',
     inputSchema: {
       type: 'object',
       properties: {
